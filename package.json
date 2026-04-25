@@ -1,0 +1,17 @@
+{
+  "name": "ai-agent-theatre",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Multi-agent event-driven debate theatre (MVP)",
+  "scripts": {
+    "dev": "pnpm --filter web dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "demo:orchestrator": "pnpm --filter @theatre/orchestrator demo"
+  },
+  "packageManager": "pnpm@10.33.2",
+  "engines": {
+    "node": ">=20"
+  }
+}
