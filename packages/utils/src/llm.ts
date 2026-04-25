@@ -18,6 +18,11 @@ export interface LLMResult {
   fallbackReason?: string;
 }
 
+export interface CallLLMOptions {
+  maxTokens?: number;
+  systemMessage?: string;
+}
+
 function getApiKey(): string | undefined {
   return process.env.LLM_API_KEY || process.env.OPENAI_API_KEY;
 }
@@ -55,8 +60,18 @@ export function describeLLM(): LLMInfo {
  * Call the LLM and return both the content and the source it came from.
  * Works with any OpenAI-compatible endpoint via `LLM_BASE_URL`.
  */
-export async function callLLMWithMeta(prompt: string): Promise<LLMResult> {
+export async function callLLMWithMeta(
+  prompt: string,
+  options: CallLLMOptions = {},
+): Promise<LLMResult> {
   const model = getModel();
+  const maxTokens = options.maxTokens ?? 500;
+  const systemMessage =
+    options.systemMessage ??
+    `你是古代「中书省—门下省—六部」议事流程的参与者。除用户特别说明外，你的回复必须依序含：
+1) 第一行，以【支持】【反对】或【中立】之一开头，表明对当前子任务要求的立场；
+2) 新起一行，以【摘要】开头，接不超过 24 字的一行概括；
+3) 新起一段，以【正文】开头，后接 1～3 段具体论述。`;
 
   if (isMockMode()) {
     return { content: mockLLM(prompt), source: "mock", model: "mock" };
@@ -71,14 +86,10 @@ export async function callLLMWithMeta(prompt: string): Promise<LLMResult> {
 
     const completion = await client.chat.completions.create({
       model,
-      temperature: 0.8,
-      max_tokens: 160,
+      temperature: 0.7,
+      max_tokens: maxTokens,
       messages: [
-        {
-          role: "system",
-          content:
-            "你是一个参与朝堂议政的角色。请严格扮演用户给出的身份，用简短有力的中文发言（不超过 80 字），并在开头用【支持】【反对】或【中立】明确表态。",
-        },
+        { role: "system", content: systemMessage },
         { role: "user", content: prompt },
       ],
     });

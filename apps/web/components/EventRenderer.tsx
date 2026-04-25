@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import type { AgentSummary, AnyEvent, Stance } from "@theatre/core";
 
 interface EventRendererProps {
@@ -19,7 +20,8 @@ export function EventRenderer({
         <div className="event event--scene">
           <span className="event__tag">开场</span>
           <p>
-            议题：<b>{event.topic}</b>。{event.agents.length} 位大臣入朝参议。
+            议题：<b>{event.topic}</b>。流程：中书省拟案 → 门下省审议 → 六部集议 →
+            汇总答复。共 {event.agents.length} 位入朝。
           </p>
           {event.llm && (
             <p className="event__meta">
@@ -51,34 +53,11 @@ export function EventRenderer({
     case "agent.speak": {
       const agent = agentsById.get(event.agentId);
       return (
-        <div
-          className={[
-            "bubble",
-            `bubble--${event.stance}`,
-            isLatestSpeak ? "bubble--fresh" : "",
-          ]
-            .filter(Boolean)
-            .join(" ")}
-        >
-          <div className="bubble__head">
-            <span className="bubble__avatar">
-              {agent?.name?.slice(0, 1) ?? "?"}
-            </span>
-            <span className="bubble__name">{agent?.name ?? event.agentId}</span>
-            <span className={`bubble__stance bubble__stance--${event.stance}`}>
-              {stanceLabel(event.stance)}
-            </span>
-            {event.source && (
-              <span
-                className={`source-badge source-badge--${event.source}`}
-                title={event.model ? `model: ${event.model}` : undefined}
-              >
-                {event.source === "llm" ? "LLM" : "Mock"}
-              </span>
-            )}
-          </div>
-          <p className="bubble__content">{event.content}</p>
-        </div>
+        <SpeakCard
+          event={event}
+          agentName={agent?.name ?? event.agentId}
+          isLatestSpeak={isLatestSpeak}
+        />
       );
     }
     case "agent.interrupt": {
@@ -92,22 +71,40 @@ export function EventRenderer({
         </div>
       );
     }
-    case "vote":
+    case "vote": {
+      const n = Math.max(1, event.result.perAgent.length);
       return (
         <div className="event event--vote">
           <span className="event__tag">投票</span>
+          <p className="event__vote-hint">（六部意向统计）</p>
           <div className="vote">
-            <VoteBar label="支持" value={event.result.support} tone="support" />
-            <VoteBar label="反对" value={event.result.oppose} tone="oppose" />
-            <VoteBar label="中立" value={event.result.neutral} tone="neutral" />
+            <VoteBar
+              label="支持"
+              value={event.result.support}
+              tone="support"
+              max={n}
+            />
+            <VoteBar
+              label="反对"
+              value={event.result.oppose}
+              tone="oppose"
+              max={n}
+            />
+            <VoteBar
+              label="中立"
+              value={event.result.neutral}
+              tone="neutral"
+              max={n}
+            />
           </div>
         </div>
       );
+    }
     case "decision.final":
       return (
         <div className={`event event--final event--${event.verdict}`}>
-          <span className="event__tag">朝议结论</span>
-          <p className="final__summary">{event.summary}</p>
+          <span className="event__tag">汇总答复</span>
+          <p className="final__summary final__summary--user">{event.summary}</p>
         </div>
       );
     default: {
@@ -117,14 +114,85 @@ export function EventRenderer({
   }
 }
 
+function SpeakCard({
+  event,
+  agentName,
+  isLatestSpeak,
+}: {
+  event: Extract<AnyEvent, { type: "agent.speak" }>;
+  agentName: string;
+  isLatestSpeak: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+
+  const summary = event.summary?.trim();
+  const content = event.content?.trim() ?? "";
+  const showToggle = Boolean(
+    summary &&
+      content &&
+      summary !== content &&
+      content.length > summary.length + 2,
+  );
+
+  useEffect(() => {
+    if (isLatestSpeak) setOpen(false);
+  }, [isLatestSpeak, event.id]);
+
+  const display = !showToggle
+    ? content
+    : open
+      ? content
+      : summary!;
+
+  return (
+    <div
+      className={[
+        "bubble",
+        `bubble--${event.stance}`,
+        isLatestSpeak ? "bubble--fresh" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      <div className="bubble__head">
+        <span className="bubble__avatar">{agentName.slice(0, 1)}</span>
+        <span className="bubble__name">{agentName}</span>
+        <span className={`bubble__stance bubble__stance--${event.stance}`}>
+          {stanceLabel(event.stance)}
+        </span>
+        {event.source && (
+          <span
+            className={`source-badge source-badge--${event.source}`}
+            title={event.model ? `model: ${event.model}` : undefined}
+          >
+            {event.source === "llm" ? "LLM" : "Mock"}
+          </span>
+        )}
+      </div>
+      <p className="bubble__lede bubble__content--readable">{display}</p>
+      {showToggle && (
+        <button
+          type="button"
+          className="bubble__expand"
+          onClick={() => setOpen((o) => !o)}
+        >
+          {open ? "收起" : "展开完整论述"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function VoteBar({
   label,
   value,
   tone,
+  max,
 }: {
   label: string;
   value: number;
   tone: Stance;
+  max: number;
 }) {
   return (
     <div className={`vote__row vote__row--${tone}`}>
@@ -132,7 +200,7 @@ function VoteBar({
       <span className="vote__bar">
         <span
           className="vote__fill"
-          style={{ width: `${Math.min(100, value * 25)}%` }}
+          style={{ width: `${Math.min(100, (value / max) * 100)}%` }}
         />
       </span>
       <span className="vote__value">{value}</span>

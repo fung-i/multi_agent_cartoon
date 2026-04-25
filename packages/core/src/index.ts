@@ -22,6 +22,8 @@ export interface AgentSummary {
   personality: string;
   bias: string;
   authority: number;
+  /** 1 = 中书/门下；2 = 六部 */
+  stageRow?: 1 | 2;
 }
 
 export interface LLMInfoPayload {
@@ -48,6 +50,8 @@ export interface AgentSpeakEvent extends BaseEvent {
   type: "agent.speak";
   agentId: string;
   content: string;
+  /** 一句短摘要，默认展示；完整论证见 content */
+  summary?: string;
   stance: Stance;
   /** Where this utterance actually came from. */
   source?: "llm" | "mock";

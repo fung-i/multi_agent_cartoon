@@ -5,17 +5,34 @@ import {
   type Stance,
   type VoteResult,
 } from "@theatre/core";
-import { agents, buildPrompt, type Agent } from "@theatre/agents";
-import { callLLMWithMeta, describeLLM, extractStance } from "@theatre/utils";
+import {
+  agents,
+  getAgent,
+  ministryAgents,
+  buildZhongshuPrompt,
+  buildMenxiaPrompt,
+  buildMinisterPrompt,
+  type Agent,
+  type PromptContext,
+} from "@theatre/agents";
+import {
+  callLLMWithMeta,
+  describeLLM,
+  parseStructuredSpeech,
+  type CallLLMOptions,
+} from "@theatre/utils";
 
 export interface RunDebateOptions {
-  /** Minimum delay between major events to keep the UI readable. */
   minStepDelayMs?: number;
 }
 
+const DEBATE_OPTS: CallLLMOptions = {
+  maxTokens: 700,
+};
+
 /**
- * Orchestrate one round of the council debate.
- * Strictly yields events in order: scene.init → (think + speak)* → vote → decision.final.
+ * 流程：scene.init → 中书省拟案 → 门下省审议 → 六部逐一发言 → 投票（仅六部）→
+ * 面向用户的汇总答复（decision.final）。
  */
 export async function* runDebate(
   topic: string,
@@ -40,37 +57,106 @@ export async function* runDebate(
   });
   await sleep(minStepDelayMs);
 
-  const previousSpeeches: Array<{ agentName: string; content: string }> = [];
-  const perAgent: VoteResult["perAgent"] = [];
+  const baseCtx: PromptContext = {
+    topic,
+    round,
+    previousSpeeches: [],
+  };
 
-  for (const agent of agents) {
+  // —— 中书省 ——
+  const zh = getAgent("zhongshu")!;
+  yield makeEvent("agent.think", {
+    round,
+    agentId: zh.id,
+    hint: `${zh.name} 草拟成案…`,
+  });
+  await sleep(minStepDelayMs);
+
+  const rawZ = await callLLMWithMeta(
+    buildZhongshuPrompt(baseCtx),
+    DEBATE_OPTS,
+  );
+  const pZ = parseStructuredSpeech(rawZ.content);
+  const zhongshuFull = pZ.content;
+  yield makeEvent("agent.speak", {
+    round,
+    agentId: zh.id,
+    content: pZ.content,
+    summary: pZ.summary,
+    stance: pZ.stance,
+    source: rawZ.source,
+    model: rawZ.model,
+  });
+  await sleep(minStepDelayMs);
+
+  // —— 门下省 ——
+  const mx = getAgent("menxia")!;
+  yield makeEvent("agent.think", {
+    round,
+    agentId: mx.id,
+    hint: `${mx.name} 审读封驳…`,
+  });
+  await sleep(minStepDelayMs);
+
+  const rawM = await callLLMWithMeta(
+    buildMenxiaPrompt(baseCtx, zhongshuFull),
+    DEBATE_OPTS,
+  );
+  const pM = parseStructuredSpeech(rawM.content);
+  const menxiaFull = pM.content;
+  yield makeEvent("agent.speak", {
+    round,
+    agentId: mx.id,
+    content: pM.content,
+    summary: pM.summary,
+    stance: pM.stance,
+    source: rawM.source,
+    model: rawM.model,
+  });
+  await sleep(minStepDelayMs);
+
+  // —— 六部 ——
+  const clip = (s: string, n: number) =>
+    s.length <= n ? s : s.slice(0, n) + "…";
+  const ministryCtxBase: PromptContext = {
+    ...baseCtx,
+    zhongshuPlan: clip(zhongshuFull, 1200),
+    menxiaOpinion: clip(menxiaFull, 1200),
+    previousSpeeches: [],
+  };
+
+  const ministryLines: Array<{ name: string; text: string }> = [];
+  const perAgent: VoteResult["perAgent"] = [];
+  const ministrySpeeches: PromptContext["previousSpeeches"] = [];
+
+  for (const agent of ministryAgents) {
     yield makeEvent("agent.think", {
       round,
       agentId: agent.id,
-      hint: `${agent.name} 正在思考...`,
+      hint: `${agent.name} 斟酌部务…`,
     });
     await sleep(minStepDelayMs);
 
-    const prompt = buildPrompt(agent, {
-      topic,
-      round,
-      previousSpeeches,
+    const prompt = buildMinisterPrompt(agent, {
+      ...ministryCtxBase,
+      previousSpeeches: ministrySpeeches,
     });
-    const { content: raw, source, model } = await callLLMWithMeta(prompt);
-    const content = cleanSpeech(raw);
-    const stance = extractStance(raw);
+    const raw = await callLLMWithMeta(prompt, DEBATE_OPTS);
+    const p = parseStructuredSpeech(raw.content);
 
     yield makeEvent("agent.speak", {
       round,
       agentId: agent.id,
-      content,
-      stance,
-      source,
-      model,
+      content: p.content,
+      summary: p.summary,
+      stance: p.stance,
+      source: raw.source,
+      model: raw.model,
     });
 
-    previousSpeeches.push({ agentName: agent.name, content });
-    perAgent.push({ agentId: agent.id, stance });
+    ministrySpeeches.push({ agentName: agent.name, content: p.content });
+    ministryLines.push({ name: agent.name, text: p.content });
+    perAgent.push({ agentId: agent.id, stance: p.stance });
     await sleep(minStepDelayMs);
   }
 
@@ -78,8 +164,23 @@ export async function* runDebate(
   yield makeEvent("vote", { round, result });
   await sleep(minStepDelayMs);
 
-  const { verdict, summary } = summarise(topic, result);
-  yield makeEvent("decision.final", { round, verdict, summary });
+  const { verdict, summary: templateSummary } = summarise(
+    topic,
+    result,
+  );
+
+  const userFace = await synthesizeForUser(
+    topic,
+    zhongshuFull,
+    menxiaFull,
+    ministryLines,
+  );
+
+  yield makeEvent("decision.final", {
+    round,
+    verdict,
+    summary: userFace || templateSummary,
+  });
 }
 
 function toSummary(a: Agent): AgentSummary {
@@ -89,13 +190,39 @@ function toSummary(a: Agent): AgentSummary {
     personality: a.personality,
     bias: a.bias,
     authority: a.authority,
+    stageRow: a.row,
   };
 }
 
-function cleanSpeech(raw: string): string {
-  // Strip the leading【支持】/【反对】/【中立】marker for cleaner bubbles;
-  // stance is already captured separately.
-  return raw.replace(/^\s*【(支持|反对|中立|赞同|赞成)】\s*/, "").trim();
+async function synthesizeForUser(
+  topic: string,
+  zhongshu: string,
+  menxia: string,
+  ministries: Array<{ name: string; text: string }>,
+): Promise<string> {
+  const body = [
+    "【中书省成案】",
+    zhongshu,
+    "",
+    "【门下省裁示】",
+    menxia,
+    "",
+    "【六部集议】",
+    ...ministries.map((m) => `${m.name}：\n${m.text}`),
+  ].join("\n");
+
+  const prompt = `请根据以下议事记录，用面向用户的语气写「最终答复」：先给 1～2 句结论，再分点说明主要依据与可保留的争议点。不要用角色扮演，不要用【支持】等套话。议题：「${topic}」\n\n${body}`;
+
+  try {
+    const { content } = await callLLMWithMeta(prompt, {
+      maxTokens: 800,
+      systemMessage:
+        "你是政务与政策类写作助手。只输出通顺的现代汉语，避免仿古口吻和标签格式。",
+    });
+    return content.trim() || "";
+  } catch {
+    return "";
+  }
 }
 
 function tallyVotes(perAgent: VoteResult["perAgent"]): VoteResult {
@@ -124,12 +251,12 @@ function summarise(
 
   const label =
     verdict === "support"
-      ? "准行此议"
+      ? "朝议在六部表决中偏支持"
       : verdict === "oppose"
-        ? "驳回此议"
-        : "暂缓议决";
+        ? "朝议在六部表决中偏反对"
+        : "朝议在六部表决中分歧较大";
 
-  const summary = `议题「${topic}」：支持 ${support}，反对 ${oppose}，中立 ${neutral}。朝议结论：${label}。`;
+  const summary = `议题「${topic}」经六部表决：支持 ${support}，反对 ${oppose}，中立 ${neutral}。${label}。`;
   return { verdict, summary };
 }
 
