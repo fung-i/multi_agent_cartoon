@@ -18,6 +18,7 @@ export default function HomePage() {
     latestSpeech,
     verdict,
     agentsById,
+    speechesByAgentId,
   } = useDerivedState(events);
 
   const running = status === "connecting" || status === "streaming";
@@ -76,6 +77,7 @@ export default function HomePage() {
         thinkingAgentId={thinkingAgentId}
         latestSpeech={latestSpeech}
         verdict={verdict}
+        speechesByAgentId={speechesByAgentId}
       />
 
       <div className="grid">
@@ -148,6 +150,13 @@ function useDerivedState(events: AnyEvent[]) {
     const agentsById = new Map<string, AgentSummary>(
       agents.map((a) => [a.id, a]),
     );
+    const speechesByAgentId = new Map<string, string[]>();
+    for (const ev of events) {
+      if (ev.type !== "agent.speak") continue;
+      const list = speechesByAgentId.get(ev.agentId) ?? [];
+      list.push((ev.content || "").trim());
+      speechesByAgentId.set(ev.agentId, list);
+    }
 
     return {
       topic,
@@ -157,6 +166,7 @@ function useDerivedState(events: AnyEvent[]) {
       latestSpeech,
       verdict,
       agentsById,
+      speechesByAgentId,
     };
   }, [events]);
 }

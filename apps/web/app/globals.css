@@ -328,7 +328,19 @@ body {
 .minister-slot__body {
   width: 140px;
   filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.55));
-  transition: filter 200ms ease;
+  transition:
+    filter 200ms ease,
+    transform 180ms ease;
+  cursor: pointer;
+  border-radius: 10px;
+  outline: none;
+}
+.minister-slot__body:hover,
+.minister-slot__body:focus-visible {
+  transform: translateY(-2px);
+}
+.minister-slot__body.is-selected {
+  box-shadow: 0 0 0 2px rgba(212, 162, 76, 0.6);
 }
 .minister-slot.is-speaking .minister-slot__body {
   filter:
@@ -404,6 +416,14 @@ body {
   padding: 4px 10px;
   text-align: center;
   box-shadow: 0 3px 0 rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  user-select: none;
+  outline: none;
+}
+.minister-plaque.is-selected {
+  box-shadow:
+    0 0 0 2px rgba(212, 162, 76, 0.75),
+    0 3px 0 rgba(0, 0, 0, 0.4);
 }
 .minister-plaque b {
   display: block;
@@ -541,6 +561,42 @@ body {
 }
 .stage-bubble--think span:nth-child(3) {
   animation-delay: 0.3s;
+}
+
+.stage-log {
+  margin-top: 12px;
+  background: rgba(17, 11, 6, 0.78);
+  border: 1px solid rgba(212, 162, 76, 0.35);
+  border-radius: 10px;
+  padding: 12px;
+}
+.stage-log__title {
+  margin: 0 0 8px;
+  color: #f6e3b6;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+}
+.stage-log__empty {
+  margin: 0;
+  color: rgba(246, 227, 182, 0.75);
+  font-size: 13px;
+}
+.stage-log__list {
+  max-height: 180px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.stage-log__item {
+  margin: 0;
+  font-size: 13px;
+  color: #fff8e7;
+  line-height: 1.55;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(212, 162, 76, 0.25);
+  border-radius: 8px;
+  padding: 8px 10px;
 }
 
 @keyframes stage-bubble-in {
@@ -861,7 +917,76 @@ body {
   font-size: 14px;
   font-weight: 500;
   line-height: 1.65;
-  white-space: pre-wrap;
+}
+
+.markdown-body {
+  color: var(--text);
+}
+.markdown-body > *:first-child {
+  margin-top: 0;
+}
+.markdown-body > *:last-child {
+  margin-bottom: 0;
+}
+.markdown-body p,
+.markdown-body ul,
+.markdown-body ol,
+.markdown-body blockquote,
+.markdown-body pre {
+  margin: 0.5em 0;
+}
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4 {
+  margin: 0.7em 0 0.4em;
+  line-height: 1.35;
+}
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: 1.25em;
+}
+.markdown-body li + li {
+  margin-top: 0.2em;
+}
+.markdown-body a {
+  color: #7ab6ff;
+  text-decoration: underline;
+}
+.markdown-body code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.92em;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+}
+.markdown-body pre {
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.65em 0.8em;
+  overflow-x: auto;
+}
+.markdown-body pre code {
+  background: transparent;
+  padding: 0;
+}
+.markdown-body table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.6em 0;
+}
+.markdown-body th,
+.markdown-body td {
+  border: 1px solid var(--border);
+  padding: 0.35em 0.5em;
+  text-align: left;
+}
+.markdown-body blockquote {
+  margin-left: 0;
+  padding-left: 0.8em;
+  border-left: 3px solid rgba(212, 162, 76, 0.55);
+  color: var(--text-dim);
 }
 
 @keyframes bubble-in {

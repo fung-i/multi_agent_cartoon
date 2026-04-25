@@ -23,6 +23,7 @@ interface SceneProps {
   speakingAgentId?: string;
   latestSpeech?: LatestSpeech;
   verdict?: Verdict;
+  speechesByAgentId?: Map<string, string[]>;
 }
 
 export function Scene({
@@ -32,12 +33,24 @@ export function Scene({
   speakingAgentId,
   latestSpeech,
   verdict,
+  speechesByAgentId,
 }: SceneProps) {
   const [detailOpen, setDetailOpen] = useState(false);
+  const [selectedAgentId, setSelectedAgentId] = useState<string>();
 
   useEffect(() => {
     setDetailOpen(false);
   }, [latestSpeech?.agentId, speakingAgentId]);
+
+  useEffect(() => {
+    if (!agents.length) {
+      setSelectedAgentId(undefined);
+      return;
+    }
+    if (!selectedAgentId || !agents.some((a) => a.id === selectedAgentId)) {
+      setSelectedAgentId(agents[0]!.id);
+    }
+  }, [agents, selectedAgentId]);
 
   const upper = agents.filter((a) => a.stageRow === 1);
   const lower = agents.filter((a) => a.stageRow === 2);
@@ -59,6 +72,12 @@ export function Scene({
             },
           ]
         : [{ key: "all", list: agents, className: "stage__row" }];
+  const selectedAgent = selectedAgentId
+    ? agents.find((a) => a.id === selectedAgentId)
+    : undefined;
+  const selectedSpeeches = selectedAgentId
+    ? speechesByAgentId?.get(selectedAgentId) ?? []
+    : [];
 
   return (
     <section className="stage">
@@ -148,10 +167,44 @@ export function Scene({
                         )}
                       </div>
                     )}
-                    <div className="minister-slot__body">
+                    <div
+                      className={[
+                        "minister-slot__body",
+                        selectedAgentId === a.id && "is-selected",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setSelectedAgentId(a.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setSelectedAgentId(a.id);
+                        }
+                      }}
+                      aria-label={`查看${a.name}发言`}
+                    >
                       <MinisterAvatar agentId={a.id} state={state} />
                     </div>
-                    <div className="minister-plaque">
+                    <div
+                      className={[
+                        "minister-plaque",
+                        selectedAgentId === a.id && "is-selected",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setSelectedAgentId(a.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setSelectedAgentId(a.id);
+                        }
+                      }}
+                      aria-label={`查看${a.name}发言`}
+                    >
                       <b>{a.name}</b>
                       <em>{personalityLabel(a.personality)}</em>
                     </div>
@@ -163,6 +216,23 @@ export function Scene({
 
         <div className="stage__floor" />
       </div>
+
+      {selectedAgent && (
+        <div className="stage-log">
+          <div className="stage-log__title">{selectedAgent.name} 发言记录</div>
+          {selectedSpeeches.length === 0 ? (
+            <p className="stage-log__empty">点击了该人物，但目前还没有发言。</p>
+          ) : (
+            <div className="stage-log__list">
+              {selectedSpeeches.map((text, i) => (
+                <p key={`${selectedAgent.id}-${i}`} className="stage-log__item">
+                  {i + 1}. {text}
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {verdict && (
         <div className={`verdict verdict--${verdict.verdict}`}>

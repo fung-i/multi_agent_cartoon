@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from "react";
 import type { AgentSummary, AnyEvent, Stance } from "@theatre/core";
+import ReactMarkdown from "react-markdown";
+import rehypeSanitize from "rehype-sanitize";
+import remarkGfm from "remark-gfm";
 
 interface EventRendererProps {
   event: AnyEvent;
@@ -104,7 +107,14 @@ export function EventRenderer({
       return (
         <div className={`event event--final event--${event.verdict}`}>
           <span className="event__tag">汇总答复</span>
-          <p className="final__summary final__summary--user">{event.summary}</p>
+          <div className="final__summary final__summary--user markdown-body">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              rehypePlugins={[rehypeSanitize]}
+            >
+              {event.summary}
+            </ReactMarkdown>
+          </div>
         </div>
       );
     default: {
